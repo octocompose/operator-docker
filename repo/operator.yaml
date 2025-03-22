@@ -1,8 +1,0 @@
-operators:
-  docker-compose:
-    source:
-      repo: https://github.com/octocompose/operator-docker-compose.git
-      ref: refs/heads/main
-      buildCmds:
-        - GOOS={{.OS}} GOARCH={{.ARCH}} make build
-      binary: dist/{{.OS}}/{{.ARCH}}/operator-docker-compose
