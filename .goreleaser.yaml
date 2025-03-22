@@ -1,5 +1,8 @@
 version: 2
 
+archives:
+  - format: binary
+
 before:
   hooks:
     # You may remove this if you don't use go modules.
