@@ -71,12 +71,12 @@ func prepareConfig(logger log.Logger, data map[string]any) (map[string]any, erro
 
 		delete(svc, "octocompose")
 
-		if svcRepo, ok := repo.Services[name]; ok {
-			if svcRepo.Docker != nil {
-				svc["image"] = svcRepo.Docker.Registry + "/" + svcRepo.Docker.Image + ":" + svcRepo.Docker.Tag
-				svc["command"] = svcRepo.Docker.Command
-				svc["entrypoint"] = svcRepo.Docker.Entrypoint
-			}
+		if svcRepo, ok := repo.Services[name]; ok && svcRepo.Docker != nil {
+			svc["image"] = svcRepo.Docker.Registry + "/" + svcRepo.Docker.Image + ":" + svcRepo.Docker.Tag
+			svc["command"] = svcRepo.Docker.Command
+			svc["entrypoint"] = svcRepo.Docker.Entrypoint
+		} else {
+			delete(services, name)
 		}
 	}
 
