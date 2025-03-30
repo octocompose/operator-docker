@@ -34,6 +34,8 @@ func main() {
 			startCmd,
 			stopCmd,
 			logCmd,
+			statusCmd,
+			showCmd,
 		},
 	}
 

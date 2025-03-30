@@ -13,6 +13,8 @@ import (
 	"github.com/go-orb/go-orb/config"
 	"github.com/go-orb/go-orb/log"
 	"github.com/urfave/cli/v3"
+
+	"github.com/octocompose/octoctl/pkg/octoconfig"
 )
 
 type composeFilePathKey struct{}
@@ -42,13 +44,15 @@ func readConfig(logger log.Logger) (map[string]any, error) {
 }
 
 func prepareConfig(logger log.Logger, data map[string]any) (map[string]any, error) {
+	repo := octoconfig.Repo{}
+	if err := config.Parse(nil, "repos", data, &repo); err != nil {
+		logger.Error("Error while parsing config", "error", err)
+		return nil, fmt.Errorf("while parsing config: %w", err)
+	}
+
 	delete(data, "configs")
 	delete(data, "octoctl")
 	delete(data, "repos")
-
-	projectID := data["projectID"].(string)
-	delete(data, "projectID")
-	data["name"] = projectID
 
 	services, ok := data["services"].(map[string]any)
 	if !ok {
@@ -57,7 +61,23 @@ func prepareConfig(logger log.Logger, data map[string]any) (map[string]any, erro
 	}
 
 	for name := range services {
-		delete(services[name].(map[string]any), "octocompose")
+		svc := services[name].(map[string]any)
+
+		// Remove disabled services
+		if svc["enabled"] != nil && !svc["enabled"].(bool) {
+			delete(services, name)
+			continue
+		}
+
+		delete(svc, "octocompose")
+
+		if svcRepo, ok := repo.Services[name]; ok {
+			if svcRepo.Docker != nil {
+				svc["image"] = svcRepo.Docker.Registry + "/" + svcRepo.Docker.Image + ":" + svcRepo.Docker.Tag
+				svc["command"] = svcRepo.Docker.Command
+				svc["entrypoint"] = svcRepo.Docker.Entrypoint
+			}
+		}
 	}
 
 	return data, nil
@@ -111,27 +131,27 @@ func beforeConfig(ctx context.Context, cmd *cli.Command) (context.Context, error
 
 	ctx = context.WithValue(ctx, loggerKey{}, logger)
 
-	data, err := readConfig(logger)
+	configData, err := readConfig(logger)
 	if err != nil {
 		logger.Error("Error while reading config", "error", err)
 		os.Exit(1)
 	}
 
-	projectID := data["projectID"].(string)
+	projectID := configData["name"].(string)
 	composeCommand := []string{"docker", "compose"}
 
 	tmpCmd := []string{}
-	if err := config.ParseSlice([]string{"octoctl"}, "command", data, &tmpCmd); err == nil {
+	if err := config.ParseSlice([]string{"octoctl"}, "command", configData, &tmpCmd); err == nil {
 		composeCommand = tmpCmd
 	}
 
-	data, err = prepareConfig(logger, data)
+	configData, err = prepareConfig(logger, configData)
 	if err != nil {
 		logger.Error("Error while reading and preparing config", "error", err)
 		os.Exit(1)
 	}
 
-	composeFilePath, err := writeConfig(logger, data, projectID)
+	composeFilePath, err := writeConfig(logger, configData, projectID)
 	if err != nil {
 		logger.Error("Error while writing config", "error", err)
 		os.Exit(1)
@@ -226,6 +246,54 @@ var logCmd = &cli.Command{
 		if cmd.Bool("follow") {
 			args = append(args, "-f")
 		}
+
+		logger := ctx.Value(loggerKey{}).(log.Logger)
+		logger.Debug("Running", "command", args[0], "args", args[1:])
+
+		execCmd := exec.Command(args[0], args[1:]...)
+		execCmd.Stdout = os.Stdout
+		execCmd.Stderr = os.Stderr
+		if err := execCmd.Run(); err != nil {
+			os.Exit(execCmd.ProcessState.ExitCode())
+		}
+
+		return nil
+	},
+}
+
+var statusCmd = &cli.Command{
+	Name:   "status",
+	Usage:  "run docker compose ps -a",
+	Before: beforeConfig,
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		composeFilePath := ctx.Value(composeFilePathKey{}).(string)
+		composeCommand := ctx.Value(composeCommandKey{}).([]string)
+
+		args := append(composeCommand, []string{"-f", composeFilePath, "ps", "-a"}...)
+
+		logger := ctx.Value(loggerKey{}).(log.Logger)
+		logger.Debug("Running", "command", args[0], "args", args[1:])
+
+		execCmd := exec.Command(args[0], args[1:]...)
+		execCmd.Stdout = os.Stdout
+		execCmd.Stderr = os.Stderr
+		if err := execCmd.Run(); err != nil {
+			os.Exit(execCmd.ProcessState.ExitCode())
+		}
+
+		return nil
+	},
+}
+
+var showCmd = &cli.Command{
+	Name:   "show",
+	Usage:  "run docker compose config",
+	Before: beforeConfig,
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		composeFilePath := ctx.Value(composeFilePathKey{}).(string)
+		composeCommand := ctx.Value(composeCommandKey{}).([]string)
+
+		args := append(composeCommand, []string{"-f", composeFilePath, "config"}...)
 
 		logger := ctx.Value(loggerKey{}).(log.Logger)
 		logger.Debug("Running", "command", args[0], "args", args[1:])

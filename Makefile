@@ -4,7 +4,7 @@ GOARCH ?= $(shell go env GOARCH)
 .PHONY: build
 build:
 	mkdir -p dist/$(GOOS)/$(GOARCH)
-	go build -tags 'netgo,disable_crypt' -buildmode=pie -trimpath -ldflags '-s' -o dist/$(GOOS)/$(GOARCH)/operator-docker-compose -v ./cmd/operator-docker-compose
+	go build -tags 'netgo,disable_crypt' -buildmode=pie -trimpath -ldflags '-s' -o dist/$(GOOS)/$(GOARCH)/operator-docker -v ./cmd/operator-docker
 
 .PHONY: clean
 clean:
