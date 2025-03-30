@@ -73,8 +73,14 @@ func prepareConfig(logger log.Logger, data map[string]any) (map[string]any, erro
 
 		if svcRepo, ok := repo.Services[name]; ok && svcRepo.Docker != nil {
 			svc["image"] = svcRepo.Docker.Registry + "/" + svcRepo.Docker.Image + ":" + svcRepo.Docker.Tag
-			svc["command"] = svcRepo.Docker.Command
-			svc["entrypoint"] = svcRepo.Docker.Entrypoint
+
+			if svcRepo.Docker.Command != nil {
+				svc["command"] = svcRepo.Docker.Command
+			}
+
+			if svcRepo.Docker.Entrypoint != "" {
+				svc["entrypoint"] = svcRepo.Docker.Entrypoint
+			}
 		} else {
 			delete(services, name)
 		}
@@ -227,8 +233,8 @@ var stopCmd = &cli.Command{
 	},
 }
 
-var logCmd = &cli.Command{
-	Name:  "log",
+var logsCmd = &cli.Command{
+	Name:  "logs",
 	Usage: "run docker compose logs -f",
 	Flags: []cli.Flag{
 		&cli.BoolFlag{

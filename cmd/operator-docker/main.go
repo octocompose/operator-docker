@@ -33,7 +33,7 @@ func main() {
 		Commands: []*cli.Command{
 			startCmd,
 			stopCmd,
-			logCmd,
+			logsCmd,
 			statusCmd,
 			showCmd,
 		},
