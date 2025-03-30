@@ -11,7 +11,7 @@ before:
     - go generate ./...
 
 builds:
-  - main: ./cmd/operator-docker-compose
+  - main: ./cmd/operator-docker
     env:
       - CGO_ENABLED=0
     goos:
