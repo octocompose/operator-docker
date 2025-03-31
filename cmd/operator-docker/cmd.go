@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 
 	"github.com/go-orb/go-orb/codecs"
 	"github.com/go-orb/go-orb/config"
@@ -169,6 +170,30 @@ func beforeConfig(ctx context.Context, cmd *cli.Command) (context.Context, error
 	return ctx, nil
 }
 
+func runCmd(ctx context.Context, args []string) error {
+	logger := ctx.Value(loggerKey{}).(log.Logger)
+	logger.Debug("Running", "command", args[0], "args", args[1:])
+
+	execCmd := exec.Command(args[0], args[1:]...)
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+	if err := execCmd.Run(); err != nil {
+		os.Exit(execCmd.ProcessState.ExitCode())
+	}
+
+	return nil
+}
+
+func runCompose(ctx context.Context, args []string) error {
+	composeFilePath := ctx.Value(composeFilePathKey{}).(string)
+	composeCommand := ctx.Value(composeCommandKey{}).([]string)
+
+	args2 := append(composeCommand, []string{"-f", composeFilePath}...)
+	args2 = append(args2, args...)
+
+	return runCmd(ctx, args2)
+}
+
 var startCmd = &cli.Command{
 	Name:  "start",
 	Usage: "run docker compose up -d",
@@ -179,25 +204,11 @@ var startCmd = &cli.Command{
 	},
 	Before: beforeConfig,
 	Action: func(ctx context.Context, cmd *cli.Command) error {
-		composeFilePath := ctx.Value(composeFilePathKey{}).(string)
-		composeCommand := ctx.Value(composeCommandKey{}).([]string)
-
-		args := append(composeCommand, []string{"-f", composeFilePath, "up", "-d"}...)
 		if cmd.Bool("dry-run") {
-			args = append(args, "--dry-run")
+			return runCompose(ctx, []string{"up", "-d", "--dry-run"})
 		}
 
-		logger := ctx.Value(loggerKey{}).(log.Logger)
-		logger.Debug("Running", "command", args[0], "args", args[1:])
-
-		execCmd := exec.Command(args[0], args[1:]...)
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
-		if err := execCmd.Run(); err != nil {
-			os.Exit(execCmd.ProcessState.ExitCode())
-		}
-
-		return nil
+		return runCompose(ctx, []string{"up", "-d"})
 	},
 }
 
@@ -211,31 +222,36 @@ var stopCmd = &cli.Command{
 	},
 	Before: beforeConfig,
 	Action: func(ctx context.Context, cmd *cli.Command) error {
-		composeFilePath := ctx.Value(composeFilePathKey{}).(string)
-		composeCommand := ctx.Value(composeCommandKey{}).([]string)
-
-		args := append(composeCommand, []string{"-f", composeFilePath, "down"}...)
 		if cmd.Bool("dry-run") {
-			args = append(args, "--dry-run")
+			return runCompose(ctx, []string{"down", "--dry-run"})
 		}
 
-		logger := ctx.Value(loggerKey{}).(log.Logger)
-		logger.Debug("Running", "command", args[0], "args", args[1:])
+		return runCompose(ctx, []string{"down"})
+	},
+}
 
-		execCmd := exec.Command(args[0], args[1:]...)
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
-		if err := execCmd.Run(); err != nil {
-			os.Exit(execCmd.ProcessState.ExitCode())
+var restartCmd = &cli.Command{
+	Name:  "restart",
+	Usage: "run docker compose restart",
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name: "dry-run",
+		},
+	},
+	Before: beforeConfig,
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		if cmd.Bool("dry-run") {
+			return runCompose(ctx, []string{"restart", "--dry-run"})
 		}
 
-		return nil
+		return runCompose(ctx, []string{"restart"})
 	},
 }
 
 var logsCmd = &cli.Command{
-	Name:  "logs",
-	Usage: "run docker compose logs -f",
+	Name:      "logs",
+	Usage:     "run docker compose logs",
+	ArgsUsage: "[service]",
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
 			Name:    "follow",
@@ -245,25 +261,31 @@ var logsCmd = &cli.Command{
 	},
 	Before: beforeConfig,
 	Action: func(ctx context.Context, cmd *cli.Command) error {
-		composeFilePath := ctx.Value(composeFilePathKey{}).(string)
-		composeCommand := ctx.Value(composeCommandKey{}).([]string)
+		args := []string{"logs"}
 
-		args := append(composeCommand, []string{"-f", composeFilePath, "logs"}...)
 		if cmd.Bool("follow") {
-			args = append(args, "-f")
+			args = append(args, "--follow")
 		}
 
-		logger := ctx.Value(loggerKey{}).(log.Logger)
-		logger.Debug("Running", "command", args[0], "args", args[1:])
-
-		execCmd := exec.Command(args[0], args[1:]...)
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
-		if err := execCmd.Run(); err != nil {
-			os.Exit(execCmd.ProcessState.ExitCode())
+		if cmd.Args().Len() > 0 {
+			args = append(args, cmd.Args().Slice()...)
 		}
 
-		return nil
+		return runCompose(ctx, args)
+	},
+}
+
+var composeCmd = &cli.Command{
+	Name:   "compose",
+	Usage:  "Runs docker compose commands.",
+	Before: beforeConfig,
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		// Capture arguments after "--"
+		if idx := slices.Index(cmd.Args().Slice(), "--"); idx != -1 {
+			args := cmd.Args().Slice()[idx+1:]
+			return runCompose(ctx, args)
+		}
+		return runCompose(ctx, []string{"compose"})
 	},
 }
 
@@ -272,22 +294,7 @@ var statusCmd = &cli.Command{
 	Usage:  "run docker compose ps -a",
 	Before: beforeConfig,
 	Action: func(ctx context.Context, cmd *cli.Command) error {
-		composeFilePath := ctx.Value(composeFilePathKey{}).(string)
-		composeCommand := ctx.Value(composeCommandKey{}).([]string)
-
-		args := append(composeCommand, []string{"-f", composeFilePath, "ps", "-a"}...)
-
-		logger := ctx.Value(loggerKey{}).(log.Logger)
-		logger.Debug("Running", "command", args[0], "args", args[1:])
-
-		execCmd := exec.Command(args[0], args[1:]...)
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
-		if err := execCmd.Run(); err != nil {
-			os.Exit(execCmd.ProcessState.ExitCode())
-		}
-
-		return nil
+		return runCompose(ctx, []string{"ps", "-a"})
 	},
 }
 
@@ -296,21 +303,6 @@ var showCmd = &cli.Command{
 	Usage:  "run docker compose config",
 	Before: beforeConfig,
 	Action: func(ctx context.Context, cmd *cli.Command) error {
-		composeFilePath := ctx.Value(composeFilePathKey{}).(string)
-		composeCommand := ctx.Value(composeCommandKey{}).([]string)
-
-		args := append(composeCommand, []string{"-f", composeFilePath, "config"}...)
-
-		logger := ctx.Value(loggerKey{}).(log.Logger)
-		logger.Debug("Running", "command", args[0], "args", args[1:])
-
-		execCmd := exec.Command(args[0], args[1:]...)
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
-		if err := execCmd.Run(); err != nil {
-			os.Exit(execCmd.ProcessState.ExitCode())
-		}
-
-		return nil
+		return runCompose(ctx, []string{"config"})
 	},
 }
