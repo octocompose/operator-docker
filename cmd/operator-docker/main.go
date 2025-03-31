@@ -24,6 +24,12 @@ func main() {
 		Usage:   "Docker Compose Operator",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
+				Name:     "config",
+				Aliases:  []string{"c"},
+				Usage:    "Set the config file",
+				Required: true,
+			},
+			&cli.StringFlag{
 				Name:    "log-level",
 				Aliases: []string{"l"},
 				Value:   "info",
@@ -34,6 +40,7 @@ func main() {
 			startCmd,
 			stopCmd,
 			restartCmd,
+			execCmd,
 			logsCmd,
 			composeCmd,
 			statusCmd,
