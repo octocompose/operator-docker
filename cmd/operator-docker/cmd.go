@@ -116,7 +116,7 @@ var composeCmd = &cli.Command{
 			args := cmd.Args().Slice()[idx+1:]
 			return operatorbase.RunCompose(ctx, args)
 		}
-		return operatorbase.RunCompose(ctx, []string{"compose"})
+		return operatorbase.RunCompose(ctx, []string{})
 	},
 }
 
